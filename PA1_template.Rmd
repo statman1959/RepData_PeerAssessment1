@@ -1,25 +1,213 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+J Conklin Reproducible Research Course Project 1
+================================================
 
+This meets the requirements of course project 1
+to produce an R markdown file containing analysis
+of the number of steps taken in five minute intervals
+over nearly two months.
 
-## Loading and preprocessing the data
+First, let's load the data and format the date variable.
 
+```{r}
 
+     activity <- read.table("./activity.csv",sep=",",header=TRUE,na.strings="NA")
 
-## What is mean total number of steps taken per day?
+     activity$date <- as.Date(as.character(activity$date),"%Y-%m-%d")
 
+     row.names(activity) <- NULL
 
+     activity$index <- seq(1,length(activity$steps),1)
+     
+```
 
-## What is the average daily activity pattern?
+Next, sum the steps by five minute interval over all days
+and construct a histogram
 
+```{r}
 
+   steps <- with(activity,tapply(steps,date,sum,na.rm = TRUE))
 
-## Imputing missing values
+   hist(steps,main = "Histogram of Total Steps in a Day",xlab = "Number of Steps")
 
+   
+```
 
+Next, compute the mean and median number of steps over
+all five minute intervals over all days.  Exclude missing
+values.
 
-## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+
+   mean(activity$steps,na.rm = TRUE)
+
+   median(activity$steps,na.rm = TRUE)
+
+```
+
+Next, average the steps by five minute interval over all 
+days.  Exclude missing values.  Format the file of averages
+to faciliate plotting.
+
+```{r}
+
+   avg_steps <- with(activity,tapply(steps,interval,mean,na.rm=TRUE))
+
+   avg_steps <- data.frame(row.names(avg_steps),avg_steps)
+
+   colnames(avg_steps) <- c("Interval","Average_Steps")
+
+   avg_steps$Interval <- as.character(avg_steps$Interval)
+
+   row.names(avg_steps) <- NULL
+   
+```
+
+Next, plot the averages.
+
+```{r}
+
+   plot(avg_steps$Interval,avg_steps$Average_Steps,type="l",col="red",
+        main= "Time Series Plot of Average Number of Steps",
+        xlab="Interval",ylab="Avg. Steps per Interval",
+        ylim=c(min(avg_steps$Average_Steps),max(avg_steps$Average_Steps)))
+
+```
+
+Next, find and print the five minute interval with the largest
+average number of steps.
+
+```{r}
+
+  avg_steps$Interval[avg_steps$Average_Steps == max(avg_steps$Average_Steps)]
+
+```
+
+Next, find the rows where the number of steps is a missing
+value.  Merge the file of steps data with file of average
+number of steps by five minute interval.  Convert interval
+variable from factor to numeric to facilitate merge.
+
+```{r}
+
+   table(is.na(activity$steps))
+
+   avg_steps$Interval <- as.numeric(avg_steps$Interval)
+
+   activity_impute <- merge(activity,avg_steps,by.x = "interval",
+                            by.y = "Interval")
+                         
+   rm(avg_steps)
+   
+```
+
+Next, impute for missing values by substituting average
+number of steps for a given five minute interval.  Compute 
+the mean and median number of steps over all five minute intervals
+over all days after imputation is complete.
+
+```{r}
+
+   activity_impute$steps[is.na(activity_impute$steps)] <- 
+                         activity_impute$Average_Steps[is.na(activity_impute$steps)]
+
+   mean(activity_impute$steps,na.rm = TRUE)
+
+   median(activity_impute$steps,na.rm = TRUE)
+   
+```
+
+Next, sum the steps by five minute interval over all days
+and construct a histogram after imputation is complete
+
+```{r}
+
+   steps_impute <- with(activity_impute,tapply(steps,date,sum,na.rm = TRUE))
+
+   hist(steps_impute,main = "Histogram of Total Steps in a Day",xlab = "Number of Steps")
+
+   rm(steps_impute)
+   
+```
+
+Next, create a new variable for whether current date falls
+on a weekday or on a weekend.  Split the file of steps data
+after imputation is complete so one piece is just for weekdays
+and the other is just for weekends.
+
+```{r}
+
+   activity_impute$period <- ifelse(weekdays(activity_impute$date) %in% 
+                                    c("Monday","Tuesday","Wednesday","Thursday","Friday"),
+                                    "Weekdays","Weekends")
+
+   avg_weekdays_impute <- with(subset(activity_impute,activity_impute$period == "Weekdays"),
+                                      tapply(steps,interval,mean,na.rm=TRUE))
+
+   avg_weekends_impute <- with(subset(activity_impute,activity_impute$period == "Weekends"),
+                                      tapply(steps,interval,mean,na.rm=TRUE))
+   
+```
+
+Next, format the two files resulting from the split to
+facilitate later creation of panel plot comparing
+trends over weekdays to trends over weekends.
+
+```{r}
+
+   avg_weekdays_impute <- data.frame(row.names(avg_weekdays_impute),avg_weekdays_impute)
+
+   colnames(avg_weekdays_impute) <- c("Interval","Average_Steps")
+
+   row.names(avg_weekdays_impute) <- NULL
+
+   avg_weekdays_impute$Period <- "Weekdays"
+
+   avg_weekends_impute <- data.frame(row.names(avg_weekends_impute),avg_weekends_impute)
+
+   colnames(avg_weekends_impute) <- c("Interval","Average_Steps")
+
+   row.names(avg_weekends_impute) <- NULL
+
+   avg_weekends_impute$Period <- "Weekends"
+   
+```
+
+Next, combine the two split pieces back into a single file.
+Convert the interval variable to numeric format to facilitate
+later panel plot.  Re-sort the data to its original order.
+
+```{r}
+
+   avg_impute_steps <- rbind(avg_weekdays_impute,avg_weekends_impute)
+
+   avg_impute_steps$Interval <- as.numeric(as.character(avg_impute_steps$Interval))
+
+   activity_impute <- activity_impute[order(activity_impute$index),]
+
+   rm(avg_weekdays_impute,avg_weekends_impute)
+   
+```
+
+Next, call ggplot2 and create panel plot comparing trends
+in steps data over weekdays to trends over weekends.  Delete
+R objects no longer needed.
+
+```{r}
+
+   library(ggplot2)
+
+   bc <- qplot(Interval,Average_Steps,data = avg_impute_steps, facets = . ~ Period,
+               main= "Time Series Plot of Average Number of Steps", col = "red", 
+               xlab="Interval",ylab="Avg. Steps per Interval",
+               ylim=c(min(avg_impute_steps$Average_Steps),
+                      max(avg_impute_steps$Average_Steps)))
+           
+   bc + theme(plot.title = element_text(hjust = 0.5)) + theme(legend.position = "none") +
+        geom_line(linetype = "solid")
+
+   rm(activity,activity_impute,avg_impute_steps)
+   
+```
+
+End of markdown file for Reproducible Research
+course project 1
